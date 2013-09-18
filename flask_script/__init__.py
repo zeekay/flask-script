@@ -153,7 +153,7 @@ class Manager(object):
 
         subparsers = parser.add_subparsers()
 
-        for name, command in self._commands.items():
+        for name, command in sorted(self._commands.items()):
             description = getattr(command, 'description', command.__doc__)
             command_parser = command.create_parser(name, parents=[options_parser])
             subparser = subparsers.add_parser(name, usage=description, help=description,
