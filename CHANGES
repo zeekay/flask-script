@@ -3,10 +3,34 @@ Flask-Script Changelog
 
 Here you can see the full list of changes between each Flask-Script release.
 
-Version 0.6.3-dev
+Version 0.6.6
 -----------------
 
-No release date
+Released on December 6, 2013
+
+- Fix global being passed after command by not expliciting checking for the 'parents' argument.
+
+Version 0.6.5
+-----------------
+
+Released on December 5, 2013
+
+- Change warning from UserWarning to DeprecationWarning so it is ignored by default
+
+Version 0.6.4
+-----------------
+
+Released on December 5, 2013
+
+- Only pass `parents` argument if a command's `create_parser` accepts it.  Workaround for #71
+
+Version 0.6.3
+-----------------
+
+Released on November 11, 2013
+
+- Separate usage into usage/help/description
+- Allow for command auto detection
 
 Version 0.6.2
 -----------------

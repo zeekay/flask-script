@@ -2,15 +2,17 @@
 from __future__ import absolute_import
 
 import os
+import re
 import sys
 import inspect
+import warnings
 
 import argparse
 
 from flask import Flask
 
-from ._compat import text_type, iteritems, imap, izip
-from .commands import Group, Option, InvalidCommand, Command, Server, Shell
+from ._compat import text_type, iteritems, izip
+from .commands import Group, Option, Command, Server, Shell
 from .cli import prompt, prompt_pass, prompt_bool, prompt_choices
 
 __all__ = ["Command", "Shell", "Server", "Manager", "Group", "Option",
@@ -64,7 +66,7 @@ class Manager(object):
     """
 
     def __init__(self, app=None, with_default_commands=None, usage=None,
-                 disable_argcomplete=False):
+                 help=None, description=None, disable_argcomplete=False):
 
         self.app = app
 
@@ -76,7 +78,9 @@ class Manager(object):
         if with_default_commands or (app and with_default_commands is None):
             self.add_default_commands()
 
-        self.usage = self.description = usage
+        self.usage = usage
+        self.help = help if help is not None else usage
+        self.description = description if description is not None else usage
         self.disable_argcomplete = disable_argcomplete
 
         self.parent = None
@@ -149,14 +153,25 @@ class Manager(object):
         # parser_parents = [options_parser]
 
         parser = argparse.ArgumentParser(prog=prog, usage=self.usage,
+                                         description=self.description,
                                          parents=[options_parser])
 
         subparsers = parser.add_subparsers()
 
         for name, command in sorted(self._commands.items()):
+            usage = getattr(command, 'usage', None)
+            help = getattr(command, 'help', command.__doc__)
             description = getattr(command, 'description', command.__doc__)
+
+            # Only pass `parents` argument for commands that support it
+            try:
             command_parser = command.create_parser(name, parents=[options_parser])
-            subparser = subparsers.add_parser(name, usage=description, help=description,
+            except TypeError:
+                warnings.warn("create_parser for {0} command should accept a `parents` argument".format(name), DeprecationWarning)
+                command_parser = command.create_parser(name)
+
+            subparser = subparsers.add_parser(name, usage=usage, help=help,
+                                              description=description,
                                               parents=[command_parser], add_help=False)
 
 
@@ -177,16 +192,47 @@ class Manager(object):
 
         return self._options
 
-    def add_command(self, name, command):
+    def add_command(self, *args, **kwargs):
         """
         Adds command to registry.
 
         :param command: Command instance
+        :param name: Name of the command (optional)
+        :param namespace: Namespace of the command (optional; pass as kwarg)
         """
+
+        if len(args) == 1:
+            command = args[0]
+            name = None
+
+        else:
+            name, command = args
+
+        if name is None:
+            if hasattr(command, 'name'):
+                name = command.name
+
+            else:
+                name = type(command).__name__.lower()
+                name = re.sub(r'command$', '', name)
 
         if isinstance(command, Manager):
             command.parent = self
 
+        if isinstance(command, type):
+            command = command()
+
+        namespace = kwargs.get('namespace')
+        if not namespace:
+            namespace = getattr(command, 'namespace', None)
+
+        if namespace:
+            if namespace not in self._commands:
+                self.add_command(namespace, Manager())
+
+            self._commands[namespace]._commands[name] = command
+
+        else:
         self._commands[name] = command
 
     def command(self, func):
@@ -334,6 +380,8 @@ class Manager(object):
             positional_args = []
 
         app = self.create_app(**app_config)
+        # for convience usage in a command
+        self.app = app
 
         return handle(app, *positional_args, **kwargs)
 

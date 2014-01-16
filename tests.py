@@ -66,6 +66,31 @@ class SimpleCommand(Command):
         print('OK')
 
 
+class NamedCommand(Command):
+    'named command'
+
+    def run(self):
+        print('OK')
+
+
+class ExplicitNamedCommand(Command):
+    'named command'
+
+    name = 'named'
+
+    def run(self):
+        print('OK')
+
+
+class NamespacedCommand(Command):
+    'namespaced command'
+
+    namespace = 'ns'
+
+    def run(self):
+        print('OK')
+
+
 class CommandWithArgs(Command):
     'command with args'
 
@@ -159,6 +184,54 @@ class TestManager:
 
         manager = Manager(self.app)
         manager.add_command('simple', SimpleCommand())
+
+        assert isinstance(manager._commands['simple'], SimpleCommand)
+
+    def test_add_named_command(self):
+
+        manager = Manager(self.app)
+        manager.add_command(NamedCommand())
+
+        assert 'named' in manager._commands
+        assert isinstance(manager._commands['named'], NamedCommand)
+
+    def test_add_explicit_named_command(self):
+
+        manager = Manager(self.app)
+        manager.add_command(ExplicitNamedCommand())
+
+        name = ExplicitNamedCommand.name
+        assert name in manager._commands
+        assert isinstance(manager._commands[name], ExplicitNamedCommand)
+
+    def test_add_namespaced_command(self):
+
+        manager = Manager(self.app)
+        manager.add_command('one', NamespacedCommand())
+        manager.add_command('two', NamespacedCommand())
+
+        assert 'ns' in manager._commands
+        assert isinstance(manager._commands['ns'], Manager)
+        ns = manager._commands['ns']
+        assert isinstance(ns._commands['one'], NamespacedCommand)
+        assert isinstance(ns._commands['two'], NamespacedCommand)
+
+    def test_add_namespaced_simple_command(self):
+
+        manager = Manager(self.app)
+        manager.add_command('hello', SimpleCommand(), namespace='ns')
+        manager.add_command('world', SimpleCommand(), namespace='ns')
+
+        assert 'ns' in manager._commands
+        assert isinstance(manager._commands['ns'], Manager)
+        ns = manager._commands['ns']
+        assert isinstance(ns._commands['hello'], SimpleCommand)
+        assert isinstance(ns._commands['world'], SimpleCommand)
+
+    def test_add_command_class(self):
+
+        manager = Manager(self.app)
+        manager.add_command('simple', SimpleCommand)
 
         assert isinstance(manager._commands['simple'], SimpleCommand)
 
@@ -338,25 +411,6 @@ class TestManager:
         assert code == 0
         assert 'Empty' not in out  # config_name is overwritten by default option value
         assert 'Development' in out
-        assert 'OK' in out
-
-        code = run('manage.py -c Before simple', lambda: manager.run())
-        out, err = capsys.readouterr()
-        assert code == 0
-        assert 'Before' in out
-        assert 'OK' in out
-
-        code = run('manage.py simple -c After', lambda: manager.run())
-        out, err = capsys.readouterr()
-        assert code == 0
-        assert 'After' in out
-        assert 'OK' in out
-
-        code = run('manage.py -c DoNotShow simple -c NewValue', lambda: manager.run())
-        out, err = capsys.readouterr()
-        assert code == 0
-        assert 'DoNotShow' not in out  # first parameter is ignored
-        assert 'NewValue' in out       # second on is printed
         assert 'OK' in out
 
     def test_get_usage(self):
@@ -641,13 +695,22 @@ class TestSubManager:
         assert code == 0
         assert 'Example sub-manager' in out
 
-    def test_submanager_usage(self, capsys):
+    def test_submanager_usage_and_help_and_description(self, capsys):
 
-        sub_manager = Manager(usage='Example sub-manager')
+        sub_manager = Manager(usage='sub_manager [--foo]',
+                              help='shorter desc for submanager',
+                              description='longer desc for submanager')
         sub_manager.add_command('simple', SimpleCommand())
 
         manager = Manager(self.app)
         manager.add_command('sub_manager', sub_manager)
+
+        code = run('manage.py -h', lambda: manager.run())
+        out, err = capsys.readouterr()
+        assert code == 0
+        assert 'sub_manager [--foo]' not in out
+        assert 'shorter desc for submanager' in out
+        assert 'longer desc for submanager' not in out
 
         code = run('manage.py sub_manager', lambda: manager.run())
         out, err = capsys.readouterr()
@@ -657,6 +720,15 @@ class TestSubManager:
         code = run('manage.py sub_manager -h', lambda: manager.run())
         out, err = capsys.readouterr()
         assert code == 0
+        assert 'sub_manager [--foo]' in out
+        assert 'shorter desc for submanager' not in out
+        assert 'longer desc for submanager' in out
+        assert 'simple command' in out
+
+        code = run('manage.py sub_manager simple -h', lambda: manager.run())
+        out, err = capsys.readouterr()
+        assert code == 0
+        assert 'sub_manager [--foo] simple [-h]' in out
         assert 'simple command' in out
 
     def test_submanager_has_no_default_commands(self):
