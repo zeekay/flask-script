@@ -165,7 +165,7 @@ class Manager(object):
 
             # Only pass `parents` argument for commands that support it
             try:
-            command_parser = command.create_parser(name, parents=[options_parser])
+                command_parser = command.create_parser(name, parents=[options_parser])
             except TypeError:
                 warnings.warn("create_parser for {0} command should accept a `parents` argument".format(name), DeprecationWarning)
                 command_parser = command.create_parser(name)
@@ -233,7 +233,7 @@ class Manager(object):
             self._commands[namespace]._commands[name] = command
 
         else:
-        self._commands[name] = command
+            self._commands[name] = command
 
     def command(self, func):
         """
