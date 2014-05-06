@@ -34,7 +34,7 @@ try:
 except ImportError:
     ARGCOMPLETE_IMPORTED = False
 
-def add_help(parser, help_args): 
+def add_help(parser, help_args):
     if not help_args:
         return
     parser.add_argument(*help_args,
@@ -138,7 +138,7 @@ class Manager(object):
     def __call__(self, app=None, **kwargs):
         """
         This procedure is called with the App instance (if this is a
-        sub-Manager) and any options. 
+        sub-Manager) and any options.
 
         If your sub-Manager does not override this, any values for options will get lost.
         """
@@ -198,7 +198,7 @@ class Manager(object):
                                               add_help=False)
 
             if isinstance(command, Manager):
-                self._patch_argparser(subparser)
+                command._patch_argparser(subparser)
 
         ## enable autocomplete only for parent parser when argcomplete is
         ## imported and it is NOT disabled in constructor
@@ -348,7 +348,7 @@ class Manager(object):
     def handle(self, prog, args=None):
         self.set_defaults()
         app_parser = self.create_parser(prog)
-        
+
         args = list(args or [])
         app_namespace, remaining_args = app_parser.parse_known_args(args)
 
