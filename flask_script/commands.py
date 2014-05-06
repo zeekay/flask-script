@@ -5,17 +5,28 @@ import os
 import code
 import warnings
 import string
+import inspect
 
 import argparse
 
 from flask import _request_ctx_stack
 
 from .cli import prompt, prompt_pass, prompt_bool, prompt_choices
+from ._compat import izip, text_type
 
 
 class InvalidCommand(Exception):
-    pass
+    """\
+        This is a generic error for "bad" commands.
+        It is not used in Flask-Script itself, but you should throw
+		this error (or one derived from it) in your command handlers,
+        and your main code should display this error's message without
+        a stack trace.
 
+        This way, we maintain interoperability if some other plug-in code
+        supplies Flask-Script hooks.
+        """
+    pass
 
 class Group(object):
     """
@@ -90,9 +101,57 @@ class Option(object):
 class Command(object):
     """
     Base class for creating commands.
+
+    :param func:  Initialize this command by introspecting the function.
     """
 
-    option_list = []
+    option_list = ()
+    help_args = None
+
+    def __init__(self, func=None):
+        if func is None:
+            if not self.option_list:
+                self.option_list = []
+            return
+
+        args, varargs, keywords, defaults = inspect.getargspec(func)
+        if inspect.ismethod(func):
+            args = args[1:]
+            
+        options = []
+        
+        # first arg is always "app" : ignore
+        
+        defaults = defaults or []
+        kwargs = dict(izip(*[reversed(l) for l in (args, defaults)]))
+        
+        for arg in args:
+        
+            if arg in kwargs:
+            
+                default = kwargs[arg]
+                
+                if isinstance(default, bool):
+                    options.append(Option('-%s' % arg[0],
+                                          '--%s' % arg,
+                                          action="store_true",
+                                          dest=arg,
+                                          required=False,
+                                          default=default))
+                else:                     
+                    options.append(Option('-%s' % arg[0],
+                                          '--%s' % arg,
+                                          dest=arg,
+                                          type=text_type,
+                                          required=False,
+                                          default=default))
+                                          
+            else:
+                options.append(Option(arg, type=text_type))
+                
+        self.run = func
+        self.__doc__ = func.__doc__
+        self.option_list = options
 
     @property
     def description(self):
@@ -113,8 +172,17 @@ class Command(object):
         return self.option_list
 
     def create_parser(self, *args, **kwargs):
+        func_stack = kwargs.pop('func_stack',())
+        parent = kwargs.pop('parent',None)
+        parser = argparse.ArgumentParser(*args, add_help=False, **kwargs)
+        help_args = self.help_args
+        while help_args is None and parent is not None:
+            help_args = parent.help_args
+            parent = getattr(parent,'parent',None)
 
-        parser = argparse.ArgumentParser(*args, **kwargs)
+        if help_args:
+            from flask_script import add_help
+            add_help(parser,help_args)
 
         for option in self.get_options():
             if isinstance(option, Group):
@@ -132,14 +200,16 @@ class Command(object):
             else:
                 parser.add_argument(*option.args, **option.kwargs)
 
-        parser.set_defaults(func_handle=self.handle)
+        parser.set_defaults(func_stack=func_stack+(self,))
 
+        self.parser = parser
+        self.parent = parent
         return parser
 
-    def handle(self, app, *args, **kwargs):
+    def __call__(self, app=None, *args, **kwargs):
         """
-        Handles the command with given app. Default behaviour is to call within
-        a test request context.
+        Handles the command with the given app.
+        Default behaviour is to call ``self.run`` within a test request context.
         """
         with app.test_request_context():
             return self.run(*args, **kwargs)
@@ -150,34 +220,6 @@ class Command(object):
         arguments as configured by the Command options.
         """
         raise NotImplementedError
-
-    def prompt(self, name, default=None):
-        warnings.warn_explicit(
-            "Command.prompt is deprecated, use prompt() function instead")
-
-        prompt(name, default)
-
-    def prompt_pass(self, name, default=None):
-        warnings.warn_explicit(
-            "Command.prompt_pass is deprecated, use prompt_pass() function "
-            "instead")
-
-        prompt_pass(name, default)
-
-    def prompt_bool(self, name, default=False):
-        warnings.warn_explicit(
-            "Command.prompt_bool is deprecated, use prompt_bool() function "
-            "instead")
-
-        prompt_bool(name, default)
-
-    def prompt_choices(self, name, choices, default=None):
-        warnings.warn_explicit(
-            "Command.choices is deprecated, use prompt_choices() function "
-            "instead")
-
-        prompt_choices(name, choices, default)
-
 
 class Shell(Command):
     """
@@ -216,11 +258,13 @@ class Shell(Command):
             Option('--no-ipython',
                 action="store_true",
                 dest='no_ipython',
-                default=not(self.use_ipython)),
+                default=not(self.use_ipython),
+                help="Do not use the BPython shell"),
             Option('--no-bpython',
                 action="store_true",
                 dest='no_bpython',
-                default=not(self.use_bpython))
+                default=not(self.use_bpython),
+                help="Do not use the IPython shell"),
         )
 
     def get_context(self):
@@ -304,7 +348,7 @@ class Server(Command):
     def get_options(self):
 
         options = (
-            Option('-t', '--host',
+            Option('-h', '--host',
                    dest='host',
                    default=self.host),
 
@@ -330,7 +374,11 @@ class Server(Command):
         )
 
         if self.use_debugger:
-            options += (Option('-d', '--no-debug',
+            options += (Option('-d', '--debug',
+                               action='store_true',
+                               dest='use_debugger',
+                               help="(no-op for compatibility)"),)
+            options += (Option('-D', '--no-debug',
                                action='store_false',
                                dest='use_debugger',
                                default=self.use_debugger),)
@@ -340,9 +388,17 @@ class Server(Command):
                                action='store_true',
                                dest='use_debugger',
                                default=self.use_debugger),)
+            options += (Option('-D', '--no-debug',
+                               action='store_false',
+                               dest='use_debugger',
+                               help="(no-op for compatibility)"),)
 
         if self.use_reloader:
-            options += (Option('-r', '--no-reload',
+            options += (Option('-r', '--reload',
+                               action='store_true',
+                               dest='use_reloader',
+                               help="(no-op for compatibility)"),)
+            options += (Option('-R', '--no-reload',
                                action='store_false',
                                dest='use_reloader',
                                default=self.use_reloader),)
@@ -352,10 +408,14 @@ class Server(Command):
                                action='store_true',
                                dest='use_reloader',
                                default=self.use_reloader),)
+            options += (Option('-R', '--no-reload',
+                               action='store_false',
+                               dest='use_reloader',
+                               help="(no-op for compatibility)"),)
 
         return options
 
-    def handle(self, app, host, port, use_debugger, use_reloader,
+    def __call__(self, app, host, port, use_debugger, use_reloader,
                threaded, processes, passthrough_errors):
         # we don't need to run the server in request context
         # so just run it directly
@@ -453,3 +513,5 @@ class ShowUrls(Command):
 
         for row in rows:
             print(str_template % row[:column_length])
+
+

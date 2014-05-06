@@ -24,18 +24,17 @@ except ImportError:
     pass
 
 install_requires = ['Flask']
-if sys.version_info < (2, 7):
-    install_requires += ['argparse']
 
 setup(
     name='Flask-Script',
-    version='0.6.7',
-    url='http://github.com/techniq/flask-script',
+    version='2.0.3',
+    url='http://github.com/smurfix/flask-script',
+	download_url = 'https://github.com/smurfix/flask-script/tarball/v2.0.3',
     license='BSD',
     author='Dan Jacob',
     author_email='danjac354@gmail.com',
-    maintainer='Sean Lynch',
-    maintainer_email='techniq35@gmail.com',
+    maintainer='Matthias Urlichs',
+    maintainer_email='matthias@urlichs.de',
     description='Scripting support for Flask',
     long_description=__doc__,
     packages=[
@@ -48,14 +47,13 @@ setup(
     ],
     platforms='any',
     classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'Environment :: Web Environment',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.6',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.3',

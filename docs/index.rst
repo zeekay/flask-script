@@ -38,7 +38,7 @@ Install with **pip** and **easy_install**::
 
 or download the latest version from version control::
 
-    git clone https://github.com/techniq/flask-script.git
+    git clone https://github.com/smurfix/flask-script.git
     cd flask-script
     python setup.py develop
 
@@ -49,12 +49,12 @@ Creating and running commands
 -----------------------------
 
 The first step is to create a Python module to run your script commands in. You can call it
-anything you like, for our examples we'll call it **manage.py**.
+anything you like, for our examples we'll call it ``manage.py``.
 
 You don't have to place all your commands in the same file; for example, in a larger project
 with lots of commands you might want to split them into a number of files with related commands.
 
-In your **manage.py** file you have to create a ``Manager`` instance. The ``Manager`` class
+In your ``manage.py`` file you have to create a ``Manager`` instance. The ``Manager`` class
 keeps track of all the commands and handles how they are called from the command line::
 
     from flask.ext.script import Manager
@@ -78,7 +78,7 @@ The next step is to create and add your commands. There are three methods for cr
     * using the ``@command`` decorator
     * using the ``@option`` decorator
 
-To take a very simple example, we want to create a **Hello** command that just prints out "hello world". It
+To take a very simple example, we want to create a ``hello`` command that just prints out "hello world". It
 doesn't take any arguments so is very straightforward::
 
     from flask.ext.script import Command
@@ -111,7 +111,7 @@ To get a list of available commands and their descriptions, just run with no com
 
 To get help text for a particular command::
 
-    python manage.py runserver -h
+    python manage.py runserver -?
 
 This will print usage plus the docstring of the ``Command``.
 
@@ -128,9 +128,9 @@ Commands created this way are run in exactly the same way as those created with 
     python manage.py hello
     > hello
 
-As with the ``Command`` class, the docstring you use for the function will appear when you run with the **-h** option::
+As with the ``Command`` class, the docstring you use for the function will appear when you run with the ``-?`` or ``--help`` option::
 
-    python manage.py -h
+    python manage.py -?
     > Just say hello
 
 Finally, the ``@option`` decorator, again belonging to ``Manager`` can be used when you want more sophisticated
@@ -142,6 +142,32 @@ control over your commands::
 
 The ``@option`` decorator is explained in more detail below.
 
+*New in version 2.0*
+
+Help was previously available with ``--help`` and ``-h``. This had a couple
+of less-than-ideal consequences, among them the inability to use ``-h`` as
+a shortcut for ``--host`` or similar options.
+
+*New in version 2.0.2*
+
+If you want to restore the original meaning of ``-h``, set your manager's
+``help_args`` attribute to a list of argument strings you want to be
+considered helpful.
+
+    manager = Manager()
+    manager.help_args = ('-h','-?','--help)
+
+You can override this list in sub-commands and -managers::
+
+    def talker(host='localhost'):
+        pass
+    ccmd = ConnectCmd(talker)
+    ccmd.help_args = ('-?','--help)
+    manager.add_command("connect", ccmd)
+    manager.run()
+
+so that ``manager -h`` prints help, while ``manager connect -h fubar.example.com``
+connects to a remote host.
 
 Adding arguments to commands
 ----------------------------
@@ -216,12 +242,10 @@ alternatively::
     > python manage.py hello -n Joe
     hello Joe
 
-There are a couple of important points to note here.
+The short form ``-n`` is formed from the first letter of the argument, so "name" > "-n". Therefore it's a good idea for your
+optional argument variable names to begin with different letters.
 
-The short-form **-n** is formed from the first letter of the argument, so "name" > "-n". Therefore it's a good idea that your
-optional argument variable names begin with different letters.
-
-The second issue is that the **-h** switch always runs the help text for that command, so avoid arguments starting with the letter "h".
+*New in version 2.0*
 
 Note also that if your optional argument is a boolean, for example::
 
@@ -305,15 +329,52 @@ Suppose you have this command::
 
 You can now run the following::
 
-    > python manage.py hello joe -c dev.cfg
+    > python manage.py -c dev.cfg hello joe
     hello JOE
 
 Assuming the ``USE_UPPERCASE`` setting is **True** in your dev.cfg file.
 
-Notice also that the "config" option is **not** passed to the command.
+Notice also that the "config" option is **not** passed to the command. In
+fact, this usage
+
+    > python manage.py hello joe -c dev.cfg
+
+will show an error message because the ``-c`` option does not belong to the
+``hello`` command.
+
+You can attach same-named options to different levels; this allows you to
+add an option to your app setup code without checking whether it conflicts with
+a command:
+
+    @manager.option('-n', '--name', dest='name', default='joe')
+    @manager.option('-c', '--clue', dest='clue', default='clue')
+    def hello(name,clue):
+        uppercase = app.config.get('USE_UPPERCASE', False)
+        if uppercase:
+            name = name.upper()
+            clue = clue.upper()
+        print "hello {}, get a {}!".format(name,clue)
+
+    > python manage.py -c dev.cfg hello -c cookie -n frank
+    hello FRANK, get a COOKIE!
+
+Note that the destination variables (command arguments, corresponding to
+``dest`` values) must still be different; this is a limitation of Python's
+argument parser.
 
 In order for manager options to work you must pass a factory function, rather than a Flask instance, to your
-``Manager`` constructor. A simple but complete example is available in `this gist <https://gist.github.com/3531881>`_.
+``Manager`` constructor. A simple but complete example is available in `this gist <https://gist.github.com/smurfix/9307618>`_.
+
+*New in version 2.0*
+
+Before version 2, options and command names could be interspersed freely.
+The author decided to discontinue this practice for a number of reasons;
+the problem with the most impact was that it was not possible to do
+
+    > python manage.py connect -d DEST
+    > python manage.py import -d DIR
+
+as these options collided.
 
 Getting user input
 ------------------
@@ -335,8 +396,8 @@ Getting user input
 
 It then runs like this::
 
-    python manage.py dropdb
-    > Are you sure you want to lose all your data ? [N]
+    > python manage.py dropdb
+    Are you sure you want to lose all your data ? [N]
 
 See the :ref:`api` below for details on the various prompt functions.
 
@@ -360,7 +421,7 @@ and then run the command::
 
     python manage.py runserver
 
-The ``Server`` command has a number of command-line arguments - run ``python manage.py runserver -h`` for details on these. You can redefine the defaults in the constructor::
+The ``Server`` command has a number of command-line arguments - run ``python manage.py runserver -?`` for details on these. You can redefine the defaults in the constructor::
 
     server = Server(host="0.0.0.0", port=9000)
 
@@ -392,11 +453,11 @@ There is also a ``shell`` decorator which you can use with a context function::
     def make_shell_context():
         return dict(app=app, db=db, models=models)
 
-This enables a **shell** command with the defaults enabled::
+This enables a ``shell`` command with the defaults enabled::
 
     > python manage.py shell
 
-The default commands **shell** and **runserver** are included by default, with the default options for these commands. If you wish to
+The default commands ``shell`` and ``runserver`` are included by default, with the default options for these commands. If you wish to
 replace them with different commands simply override with ``add_command()`` or the decorators. If you pass ``with_default_commands=False``
 to the ``Manager`` constructor these commands will not be loaded::
 
@@ -408,17 +469,39 @@ A Sub-Manager is an instance of ``Manager`` added as a command to another Manage
 
 To create a submanager::
 
-    sub_manager = Manager()
+    def sub_opts(app, **kwargs):
+        pass
+    sub_manager = Manager(sub_opts)
 
     manager = Manager(self.app)
     manager.add_command("sub_manager", sub_manager)
 
-Restrictions
-    - A sub-manager does not provide an app instance/factory when created, it defers the calls to it's parent Manager's
-    - A sub-manager inhert's the parent Manager's app options (used for the app instance/factory)
-    - A sub-manager does not get default commands added to itself (by default)
-    - A sub-manager must be added the primary/root ``Manager`` instance via ``add_command(sub_manager)``
-    - A sub-manager can be added to another sub-manager as long as the parent sub-manager is added to the primary/root Manager
+If you attach options to the sub_manager, the ``sub_opts`` procedure will
+receive their values. Your application is passed in ``app`` for
+convenience.
+
+If ``sub_opts`` returns a value other than ``None``, this value will replace
+the ``app`` value that's passed on. This way, you can implement a
+sub-manager which replaces the whole app. One use case is to create a
+separate administrative application for improved security::
+
+    def gen_admin(app, **kwargs):
+        from myweb.admin import MyAdminApp
+        ## easiest but possibly incomplete way to copy your settings
+        return MyAdminApp(config=app.config, **kwargs)
+    sub_manager = Manager(gen_admin)
+
+    manager = Manager(MyApp)
+    manager.add_command("admin", sub_manager)
+
+    > python manage.py runserver
+    [ starts your normal server ]
+    > python manage.py admin runserver
+    [ starts an administrative server ]
+
+You can cascade sub-managers, i.e. add one sub-manager to another. 
+
+A sub-manager does not get default commands added to itself (by default)
 
 *New in version 0.5.0.*
 
@@ -486,6 +569,35 @@ The commands will then be available::
       populate  Populate database with default data
       recreate  Recreates database tables (same as issuing 'drop' and then 'create')
 
+Error handling
+--------------
+
+Users do not like to see stack traces, but developers want them for bug reports.
+
+Therefore, ``flask.ext.script.command`` provides an `InvalidCommand` error
+class which is not supposed to print a stack trace when reported.
+
+In your command handler:
+
+	from flask.ext.script.command import InvalidCommand
+
+    [… if some command verification fails …]
+    class MyCommand(Command):
+        def run(self, foo=None,bar=None):
+            if foo and bar:
+	            raise InvalidCommand("Options foo and bar are incompatible")
+
+In your main loop:
+
+    try:
+        MyManager().run()
+    except InvalidCommand as err:
+        print(err, file=sys.stderr)
+        sys.exit(1)
+
+This way, you maintain interoperability if some plug-in code supplies
+Flask-Script hooks you'd like to use, or vice versa.
+
 Accessing local proxies
 -----------------------
 
@@ -521,5 +633,4 @@ API
 .. autofunction:: prompt_choices
 
 .. _Flask: http://flask.pocoo.org
-.. _GitHub: http://github.com/techniq/flask-script
-.. _argparse: http://pypi.python.org/pypi/argparse
+.. _GitHub: http://github.com/smurfix/flask-script
