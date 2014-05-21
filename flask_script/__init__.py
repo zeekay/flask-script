@@ -198,6 +198,7 @@ class Manager(object):
                                               add_help=False)
 
             if isinstance(command, Manager):
+                command.app = self.app
                 command._patch_argparser(subparser)
 
         ## enable autocomplete only for parent parser when argcomplete is
@@ -208,9 +209,6 @@ class Manager(object):
 
         self.parser = parser
         return parser
-
-    # def foo(self, app, *args, **kwargs):
-    #     print(args)
 
     def _patch_argparser(self, parser):
         """
