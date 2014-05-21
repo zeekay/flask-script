@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
+from __future__ import absolute_import,print_function
 
 import os
+import sys
 import code
 import warnings
 import string
@@ -19,7 +20,7 @@ class InvalidCommand(Exception):
     """\
         This is a generic error for "bad" commands.
         It is not used in Flask-Script itself, but you should throw
-		this error (or one derived from it) in your command handlers,
+        this error (or one derived from it) in your command handlers,
         and your main code should display this error's message without
         a stack trace.
 
@@ -317,12 +318,15 @@ class Server(Command):
 
     :param host: server host
     :param port: server port
-    :param use_debugger: if False, will no longer use Werkzeug debugger.
+    :param use_debugger: Flag whether to default to using the Werkzeug debugger.
                          This can be overriden in the command line
-                         by passing the **-d** flag.
-    :param use_reloader: if False, will no longer use auto-reloader.
+                         by passing the **-d** or **-D** flag.
+                         Defaults to False, for security.
+
+    :param use_reloader: Flag whether to use the auto-reloader.
+                         Default to True when debugging.
                          This can be overriden in the command line by
-                         passing the **-r** flag.
+                         passing the **-r**/**-R** flag.
     :param threaded: should the process handle each request in a separate
                      thread?
     :param processes: number of processes to spawn
@@ -332,14 +336,14 @@ class Server(Command):
 
     help = description = 'Runs the Flask development server i.e. app.run()'
 
-    def __init__(self, host='127.0.0.1', port=5000, use_debugger=True,
-                 use_reloader=True, threaded=False, processes=1,
+    def __init__(self, host='127.0.0.1', port=5000, use_debugger=None,
+                 use_reloader=None, threaded=False, processes=1,
                  passthrough_errors=False, **options):
 
         self.port = port
         self.host = host
         self.use_debugger = use_debugger
-        self.use_reloader = use_reloader
+        self.use_reloader = use_reloader if use_reloader is not None else use_debugger
         self.server_options = options
         self.threaded = threaded
         self.processes = processes
@@ -371,47 +375,29 @@ class Server(Command):
                    action='store_true',
                    dest='passthrough_errors',
                    default=self.passthrough_errors),
-        )
 
-        if self.use_debugger:
-            options += (Option('-d', '--debug',
-                               action='store_true',
-                               dest='use_debugger',
-                               help="(no-op for compatibility)"),)
-            options += (Option('-D', '--no-debug',
-                               action='store_false',
-                               dest='use_debugger',
-                               default=self.use_debugger),)
+            Option('-d', '--debug',
+                   action='store_true',
+                   dest='use_debugger',
+                   help='enable the Werkzeug debugger (DO NOT use in production code)',
+                   default=self.use_debugger),
+            Option('-D', '--no-debug',
+                   action='store_false',
+                   dest='use_debugger',
+                   help='disable the Werkzeug debugger',
+                   default=self.use_debugger),
 
-        else:
-            options += (Option('-d', '--debug',
-                               action='store_true',
-                               dest='use_debugger',
-                               default=self.use_debugger),)
-            options += (Option('-D', '--no-debug',
-                               action='store_false',
-                               dest='use_debugger',
-                               help="(no-op for compatibility)"),)
-
-        if self.use_reloader:
-            options += (Option('-r', '--reload',
-                               action='store_true',
-                               dest='use_reloader',
-                               help="(no-op for compatibility)"),)
-            options += (Option('-R', '--no-reload',
-                               action='store_false',
-                               dest='use_reloader',
-                               default=self.use_reloader),)
-
-        else:
-            options += (Option('-r', '--reload',
-                               action='store_true',
-                               dest='use_reloader',
-                               default=self.use_reloader),)
-            options += (Option('-R', '--no-reload',
-                               action='store_false',
-                               dest='use_reloader',
-                               help="(no-op for compatibility)"),)
+            Option('-r', '--reload',
+                   action='store_true',
+                   dest='use_reloader',
+                   help='monitor Python files for changes (not 100% safe for production use)',
+                   default=self.use_reloader),
+            Option('-R', '--no-reload',
+                   action='store_false',
+                   dest='use_reloader',
+                   help='do not monitor Python files for changes',
+                   default=self.use_reloader),
+            )
 
         return options
 
@@ -420,6 +406,14 @@ class Server(Command):
         # we don't need to run the server in request context
         # so just run it directly
 
+        if use_debugger is None:
+            use_debugger = app.debug
+            if use_debugger is None:
+                use_debugger = True
+                if sys.stderr.isatty():
+                    print("Debugging is on. DANGER: Do not allow random users to connect to this server.", file=sys.stderr)
+        if use_reloader is None:
+            use_reloader = app.debug
         app.run(host=host,
                 port=port,
                 debug=use_debugger,
